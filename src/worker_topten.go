@@ -7,12 +7,36 @@ package main
         "time"
         "encoding/json"
         "sync"
+        "github.com/spf13/viper"
+        "os"
     )
+
+    type DatabaseConfig struct {
+        Dbtype string `mapstructure:"dbtype"`
+        Host string `mapstructure:"hostname"`
+        Port string `mapstructure:"port"`
+        User string `mapstructure:"username"`
+        Pass string `mapstructure:"password"`
+        Dbname string `mapstructure:"dbname"`
+    }
+
+    type Config struct {
+        Db  DatabaseConfig `mapstructure:"database"`
+    }
 
     func main() {
         var wg sync.WaitGroup
-    	db, err := sql.Open("mysql", "root:huripdb@/newkalbe?charset=utf8")
+    	
+        v := readConfig()
+        var c Config
+        if err := v.Unmarshal(&c); err != nil {
+            fmt.Printf("couldn't read config: %s", err)
+        }
+        dbconnstring := `%s:%s@tcp(%s:%s)/%s?charset=utf8`
+        db, err := sql.Open(c.Db.Dbtype, fmt.Sprintf(dbconnstring, c.Db.User, c.Db.Pass, c.Db.Host, c.Db.Port, c.Db.Dbname))
     	checkErr(err)
+
+        wg.Add(5)
 
     	// get topten orders
         go topTenOrder(&wg, db, "pending")
@@ -25,13 +49,26 @@ package main
         
         // make sure the channel doesn't close while executing go routine
         // other method available, will be done in next research
-        time.Sleep(3 * time.Second)
+        //time.Sleep(3 * time.Second)
+        wg.Wait()
     }
 
     func checkErr(err error) {
         if err != nil {
             panic(err)
         }
+    }
+
+    func readConfig()(*viper.Viper) {
+        v := viper.New()
+        v.SetConfigName("config")
+        v.AddConfigPath("../config/")
+        if err := v.ReadInConfig(); err != nil {
+            fmt.Printf("couldn't load config: %s", err)
+            os.Exit(1)
+        }
+
+        return v
     }
 
     func topTenOrder(wg *sync.WaitGroup, db *sql.DB, status string) {
@@ -65,6 +102,8 @@ LIMIT 0,10`
             //fmt.Printf("%d. %s : %d %d\n", i, status, total_orders, (date_diff * -1))
             i++
         }
+
+        defer wg.Done()
     }
 
     func topTenPo(wg *sync.WaitGroup, db *sql.DB, status string) {
@@ -99,6 +138,8 @@ LIMIT 0,10`
             //fmt.Printf("%d. %s : %d %d\n", i, status, total_orders, (date_diff * -1))
             i++
         }
+
+        defer wg.Done()
     }
 
     func insert(db *sql.DB, key string, total_orders int, json_data []byte) {

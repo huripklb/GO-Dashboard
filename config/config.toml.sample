@@ -1,0 +1,7 @@
+[database]
+dbtype = "database_type"
+hostname = "localhost"
+port = "9999"
+username = "database_username"
+password = "database_password"
+dbname = "database_name"
